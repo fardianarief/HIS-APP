@@ -173,89 +173,94 @@
   </div>
 
   <script>
-    // --- Install prompt handling ---
-    let deferredPrompt;
-    const installButton = document.getElementById('installButton');
+  // --- Install prompt handling ---
+  let deferredPrompt;
+  const installButton = document.getElementById('installButton');
 
-    window.addEventListener('beforeinstallprompt', (e) => {
-      e.preventDefault();
-      deferredPrompt = e;
-      installButton.style.display = 'inline-block';
-    });
+  window.addEventListener('beforeinstallprompt', (e) => {
+    e.preventDefault();
+    deferredPrompt = e;
+    installButton.style.display = 'inline-block';
+  });
 
-    installButton.addEventListener('click', async () => {
-      if (!deferredPrompt) return;
-      installButton.style.display = 'none';
-      deferredPrompt.prompt();
-      const choice = await deferredPrompt.userChoice;
-      if (choice.outcome === 'accepted') {
-        console.log('User accepted install');
-      } else {
-        console.log('User dismissed install');
-      }
-      deferredPrompt = null;
-    });
+  installButton.addEventListener('click', async () => {
+    if (!deferredPrompt) return;
+    installButton.style.display = 'none';
+    deferredPrompt.prompt();
+    const choice = await deferredPrompt.userChoice;
+    deferredPrompt = null;
+  });
 
-    // --- Theme toggle logic ---
-    const toggle = document.getElementById('themeToggle');
-    const body = document.body;
-    const iframe = document.getElementById('appIframe');
-    const metaThemeColor = document.getElementById('meta-theme-color');
+  // --- Theme toggle logic ---
+  const toggle = document.getElementById('themeToggle');
+  const body = document.body;
+  const iframe = document.getElementById('appIframe');
+  const metaThemeColor = document.querySelector('meta[name="theme-color"]');
 
-    // Links per tema
-    const LIGHT_URL = "https://www.appsheet.com/start/10e7f299-568d-46f5-b4c8-f0f5b1173962?refresh=1";
-    const DARK_URL  = "https://www.appsheet.com/start/10e7f299-568d-46f5-b4b8-f0f5b1173962?refresh=1";
+  // Links per tema
+  const LIGHT_URL = "https://www.appsheet.com/start/10e7f299-568d-46f5-b4c8-f0f5b1173962?refresh=1";
+  const DARK_URL  = "https://www.appsheet.com/start/10e7f299-568d-46f5-b4b8-f0f5b1173962?refresh=1";
 
-    function applyTheme(theme) {
-      if (theme === 'light') {
-        toggle.classList.remove('dark'); toggle.classList.add('light');
-        body.classList.remove('dark'); body.classList.add('light');
-        iframe.src = LIGHT_URL;
-        metaThemeColor.setAttribute('content', '#ffffff');
-        localStorage.setItem('his_theme', 'light');
-        localStorage.setItem('his_src', LIGHT_URL);
-      } else {
-        toggle.classList.remove('light'); toggle.classList.add('dark');
-        body.classList.remove('light'); body.classList.add('dark');
-        iframe.src = DARK_URL;
-        metaThemeColor.setAttribute('content', '#000000');
-        localStorage.setItem('his_theme', 'dark');
-        localStorage.setItem('his_src', DARK_URL);
-      }
+  function applyTheme(theme, isAuto = false) {
+    // Simpan preferensi hanya jika manual
+    if (!isAuto) localStorage.setItem('his_theme_manual', 'true');
+    if (!isAuto) localStorage.setItem('his_theme', theme);
+
+    if (theme === 'light') {
+      toggle.classList.remove('dark'); toggle.classList.add('light');
+      body.classList.remove('dark'); body.classList.add('light');
+      iframe.src = LIGHT_URL;
+      metaThemeColor.setAttribute('content', '#ffffff');
+    } else {
+      toggle.classList.remove('light'); toggle.classList.add('dark');
+      body.classList.remove('light'); body.classList.add('dark');
+      iframe.src = DARK_URL;
+      metaThemeColor.setAttribute('content', '#000000');
     }
+  }
 
-    // Initialize from localStorage or default = dark
-    (function initTheme() {
-      const saved = localStorage.getItem('his_theme');
-      const savedSrc = localStorage.getItem('his_src');
-      if (saved === 'light') {
-        applyTheme('light');
-      } else if (saved === 'dark') {
-        applyTheme('dark');
-      } else {
-        // default dark
-        applyTheme('dark');
-        if (savedSrc) iframe.src = savedSrc; // fallback
-      }
-    })();
+  function detectSystemTheme() {
+    return window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
+  }
 
-    // Toggle click
-    toggle.addEventListener('click', () => {
-      const current = localStorage.getItem('his_theme') || 'dark';
-      const next = current === 'light' ? 'dark' : 'light';
-      // Add quick animation pulse
-      toggle.animate([{ transform: 'scale(1)' }, { transform: 'scale(1.06)' }, { transform: 'scale(1)' }], { duration: 300 });
-      applyTheme(next);
-    });
+  // --- Inisialisasi tema pertama kali ---
+  (function initTheme() {
+    const manual = localStorage.getItem('his_theme_manual');
+    const savedTheme = localStorage.getItem('his_theme');
+    const systemTheme = detectSystemTheme();
 
-    // --- Service worker registration ---
-    if ('serviceWorker' in navigator) {
-      window.addEventListener('load', () => {
-        navigator.serviceWorker.register('service-worker.js')
-          .then(reg => console.log('ServiceWorker registered', reg.scope))
-          .catch(err => console.warn('ServiceWorker failed', err));
-      });
+    if (manual && savedTheme) {
+      applyTheme(savedTheme);
+    } else {
+      applyTheme(systemTheme, true);
     }
+  })();
+
+  // --- Toggle manual ---
+  toggle.addEventListener('click', () => {
+    const current = localStorage.getItem('his_theme') || detectSystemTheme();
+    const next = current === 'light' ? 'dark' : 'light';
+    toggle.animate([{ transform: 'scale(1)' }, { transform: 'scale(1.06)' }, { transform: 'scale(1)' }], { duration: 300 });
+    applyTheme(next);
+  });
+
+  // --- Jika sistem berubah tema (dan user belum pernah pilih manual), ikuti otomatis ---
+  window.matchMedia('(prefers-color-scheme: dark)').addEventListener('change', e => {
+    const manual = localStorage.getItem('his_theme_manual');
+    if (!manual) {
+      const newTheme = e.matches ? 'dark' : 'light';
+      applyTheme(newTheme, true);
+    }
+  });
+
+  // --- Service worker registration ---
+  if ('serviceWorker' in navigator) {
+    window.addEventListener('load', () => {
+      navigator.serviceWorker.register('service-worker.js')
+        .then(reg => console.log('ServiceWorker registered', reg.scope))
+        .catch(err => console.warn('ServiceWorker failed', err));
+    });
+  }
   </script>
 </body>
   </html>
